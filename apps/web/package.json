@@ -1,0 +1,28 @@
+{
+  "name": "@fedistack/web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "dev": "bun --bun next dev --port 3000",
+    "build": "bun --bun next build",
+    "start": "bun --bun next start --port 3000",
+    "typecheck": "bun --bun tsc --noEmit"
+  },
+  "dependencies": {
+    "@fedistack/ui": "workspace:*",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  }
+}

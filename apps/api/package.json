@@ -1,0 +1,22 @@
+{
+  "name": "@fedistack/api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fedistack/auth": "workspace:*",
+    "@fedistack/database": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.15",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "fedistack",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "bun --cwd apps/api --env-file=../../.env dev",
+    "dev:web": "bun --cwd apps/web --env-file=../../.env dev",
+    "build": "bun --cwd apps/web --env-file=../../.env build",
+    "typecheck": "bun --bun tsc --noEmit && bun --cwd apps/web typecheck",
+    "test": "bun --bun vitest run",
+    "test:watch": "bun --bun vitest",
+    "db:generate": "bun --cwd packages/database --env-file=../../.env db:generate",
+    "db:migrate": "bun --cwd packages/database --env-file=../../.env db:migrate",
+    "lint": "bun run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
