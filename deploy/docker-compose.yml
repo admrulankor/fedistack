@@ -3,16 +3,19 @@ services:
     image: postgres:16-alpine
     container_name: fedistack-postgres
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fedistack}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fedistack_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-fedistack}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - fedistack_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fedistack} -d ${POSTGRES_DB:-fedistack}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-fedistack} -d $${POSTGRES_DB:-fedistack}"]
       interval: 5s
       timeout: 5s
       retries: 10

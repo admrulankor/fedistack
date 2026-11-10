@@ -10,7 +10,7 @@ export default defineConfig({
   dbCredentials: {
     url:
       process.env.DATABASE_URL ??
-      "postgresql://fedistack:fedistack_dev_password@localhost:5432/fedistack"
+      "postgresql://fedistack:fedistack_dev_password@localhost:5433/fedistack"
   },
   strict: true,
   verbose: true

@@ -9,7 +9,7 @@ export const apiConfigSchema = z.object({
     .string()
     .min(1, "DATABASE_URL is required")
     .default(
-      "postgresql://fedistack:fedistack_dev_password@localhost:5432/fedistack"
+      "postgresql://fedistack:fedistack_dev_password@localhost:5433/fedistack"
     ),
   API_HOST: z.string().default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().default(4000),

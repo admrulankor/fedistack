@@ -36,10 +36,10 @@ cp .env.example .env
 ### 3. Start Local Services (PostgreSQL & Mailpit)
 
 ```bash
-docker compose up -d
+docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ```
 
-- **PostgreSQL:** `localhost:5432`
+- **PostgreSQL:** `localhost:5433`
 - **Mailpit SMTP:** `localhost:1025`
 - **Mailpit Web UI (inspect magic-link emails):** `http://localhost:8025`
 
