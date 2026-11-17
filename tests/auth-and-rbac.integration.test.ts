@@ -1,7 +1,3 @@
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import {
   AuthError,
   AuthService,
@@ -28,66 +24,10 @@ import {
 } from "@fedistack/database";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApiApp } from "../apps/api/src/app.js";
-
-interface EphemeralPgCluster {
-  connectionString: string;
-  stop: () => void;
-}
-
-function startEphemeralPostgresCluster(): EphemeralPgCluster {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fedistack-pg-test-"));
-  const dataDir = path.join(tmpRoot, "data");
-  const socketDir = path.join(tmpRoot, "socket");
-  const logFile = path.join(tmpRoot, "postgres.log");
-  fs.mkdirSync(socketDir, { recursive: true });
-
-  const port = 55432 + Math.floor(Math.random() * 2000);
-
-  execFileSync(
-    "initdb",
-    [
-      "-D",
-      dataDir,
-      "-U",
-      "postgres",
-      "--auth=trust",
-      "--no-instructions",
-      "--encoding=UTF8"
-    ],
-    { stdio: "pipe" }
-  );
-
-  execFileSync(
-    "pg_ctl",
-    [
-      "-D",
-      dataDir,
-      "-l",
-      logFile,
-      "-o",
-      `-F -p ${port} -k ${socketDir} -h 127.0.0.1`,
-      "-w",
-      "start"
-    ],
-    { stdio: "pipe" }
-  );
-
-  const connectionString = `postgresql://postgres@127.0.0.1:${port}/postgres`;
-
-  return {
-    connectionString,
-    stop: () => {
-      try {
-        execFileSync("pg_ctl", ["-D", dataDir, "-m", "immediate", "stop"], {
-          stdio: "pipe"
-        });
-      } catch {
-        // Ignore shutdown errors on cleanup
-      }
-      fs.rmSync(tmpRoot, { recursive: true, force: true });
-    }
-  };
-}
+import {
+  type EphemeralPgCluster,
+  startEphemeralPostgresCluster
+} from "./pg-test-cluster.js";
 
 function extractTokenFromMagicLinkUrl(magicLinkUrl: string): string {
   const url = new URL(magicLinkUrl);

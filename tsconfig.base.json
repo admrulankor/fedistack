@@ -21,6 +21,7 @@
     "paths": {
       "@fedistack/database": ["./packages/database/src/index.ts"],
       "@fedistack/auth": ["./packages/auth/src/index.ts"],
+      "@fedistack/publishing": ["./packages/publishing/src/index.ts"],
       "@fedistack/ui": ["./packages/ui/src/index.tsx"],
       "drizzle-orm": ["./packages/database/node_modules/drizzle-orm"]
     }

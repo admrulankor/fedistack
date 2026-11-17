@@ -8,6 +8,13 @@
       "when": 1793829485357,
       "tag": "0000_funny_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794908655135,
+      "tag": "0001_loud_masque",
+      "breakpoints": true
     }
   ]
 }

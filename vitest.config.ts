@@ -4,6 +4,7 @@ import path from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
+    fileParallelism: false,
     include: [
       "packages/*/src/**/*.test.ts",
       "apps/*/src/**/*.test.ts",
@@ -22,6 +23,7 @@ export default defineConfig({
     alias: {
       "@fedistack/database": path.resolve(__dirname, "packages/database/src/index.ts"),
       "@fedistack/auth": path.resolve(__dirname, "packages/auth/src/index.ts"),
+      "@fedistack/publishing": path.resolve(__dirname, "packages/publishing/src/index.ts"),
       "@fedistack/ui": path.resolve(__dirname, "packages/ui/src/index.tsx")
     }
   }

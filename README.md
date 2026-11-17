@@ -2,22 +2,33 @@
 
 Fedistack is a free and open-source, self-hostable federated publishing and newsletter platform licensed under `AGPL-3.0-or-later`.
 
-## Monorepo Structure (MVP 0.1 — Phase 1)
+## Monorepo Structure (MVP 0.1 — Publishing Foundation)
 
 ```text
 fedistack/
 ├── apps/
-│   ├── api/                    # Hono REST API (passwordless auth, sessions, CSRF & health)
-│   └── web/                    # Next.js App Router frontend (sign-in, magic link verification, workspace)
+│   ├── api/                    # Hono REST API (auth, organizations, publications, articles & public feeds)
+│   └── web/                    # Next.js App Router frontend (dashboard, article editor, public reader views)
 ├── packages/
 │   ├── database/               # Drizzle ORM schema, PostgreSQL client, and version-controlled SQL migrations
 │   ├── auth/                   # Passwordless magic links, server-side sessions, CSRF, rate limiting, and RBAC
+│   ├── publishing/             # Organizations, publications, TipTap/ProseMirror structured articles, and sanitized server-side rendering
 │   └── ui/                     # Shared accessible React UI components (Tailwind CSS)
 ├── deploy/
 │   └── docker-compose.yml      # Local PostgreSQL 16 and Mailpit (local SMTP server)
 ├── tests/                      # End-to-end PostgreSQL & API integration test suites
 └── .env.example                # Documented environment variable template
 ```
+
+### Key Application Routes
+
+- **Publisher Workspace:**
+  - `/dashboard` — Create and administer organizations and publications
+  - `/dashboard/publications/[publicationId]` — Manage publication settings, team roles, and articles
+  - `/dashboard/publications/[publicationId]/articles/[articleId]` — Structured article authoring, preview, and publish/unpublish lifecycle
+- **Public Reader Routes:**
+  - `/p/[publicationSlug]` — Public publication homepage and published article feed
+  - `/p/[publicationSlug]/[articleSlug]` — Public article reader with server-side paywall enforcement
 
 ## Quickstart
 

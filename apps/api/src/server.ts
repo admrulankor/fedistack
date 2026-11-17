@@ -5,6 +5,7 @@ import {
   SmtpMagicLinkTransport
 } from "@fedistack/auth";
 import { createDatabaseConnection } from "@fedistack/database";
+import { PublishingService } from "@fedistack/publishing";
 import { serve } from "@hono/node-server";
 import { createApiApp } from "./app.js";
 import { loadApiConfig } from "./config.js";
@@ -38,9 +39,15 @@ const rateLimiter = new SlidingWindowRateLimiter({
   maxRequests: config.AUTH_RATE_LIMIT_MAX_REQUESTS
 });
 
+const publishingService = new PublishingService({
+  db: dbConnection.db,
+  logger
+});
+
 const app = createApiApp({
   authService,
   rateLimiter,
+  publishingService,
   cookieName: config.AUTH_COOKIE_NAME,
   cookieDomain: config.AUTH_COOKIE_DOMAIN,
   cookieSecure: config.NODE_ENV === "production",

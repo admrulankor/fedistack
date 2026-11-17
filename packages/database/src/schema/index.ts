@@ -32,6 +32,17 @@ export const auditScopeTypeEnum = pgEnum("audit_scope_type", [
   "publication"
 ]);
 
+export const articleStatusEnum = pgEnum("article_status", [
+  "draft",
+  "published",
+  "unpublished"
+]);
+
+export const articleVisibilityEnum = pgEnum("article_visibility", [
+  "public",
+  "members_only"
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -216,6 +227,48 @@ export const auditLogs = pgTable(
   ]
 );
 
+export const articles = pgTable(
+  "articles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    publicationId: uuid("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    subtitle: text("subtitle"),
+    excerpt: text("excerpt"),
+    body: jsonb("body").$type<Record<string, unknown>>().notNull(),
+    status: articleStatusEnum("status").notNull().default("draft"),
+    visibility: articleVisibilityEnum("visibility")
+      .notNull()
+      .default("public"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    unpublishedAt: timestamp("unpublished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+  },
+  (table) => [
+    uniqueIndex("articles_publication_slug_unique_idx").on(
+      table.publicationId,
+      table.slug
+    ),
+    index("articles_publication_status_published_idx").on(
+      table.publicationId,
+      table.status,
+      table.publishedAt
+    ),
+    index("articles_author_user_id_idx").on(table.authorUserId)
+  ]
+);
+
 export type UserRecord = typeof users.$inferSelect;
 export type NewUserRecord = typeof users.$inferInsert;
 export type AuthMagicLinkTokenRecord = typeof authMagicLinkTokens.$inferSelect;
@@ -227,3 +280,5 @@ export type PublicationRecord = typeof publications.$inferSelect;
 export type PublicationMembershipRecord =
   typeof publicationMemberships.$inferSelect;
 export type AuditLogRecord = typeof auditLogs.$inferSelect;
+export type ArticleRecord = typeof articles.$inferSelect;
+export type NewArticleRecord = typeof articles.$inferInsert;

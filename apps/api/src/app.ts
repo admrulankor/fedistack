@@ -8,9 +8,23 @@ import {
   serializeClearSessionCookie,
   serializeSessionCookie,
   type SlidingWindowRateLimiter,
-  type StructuredLogger
+  type StructuredLogger,
+  type ValidatedSessionContext
 } from "@fedistack/auth";
-import { Hono } from "hono";
+import {
+  type ArticleStatus,
+  createArticleInputSchema,
+  createOrganizationInputSchema,
+  createPublicationInputSchema,
+  PublishingError,
+  type PublishingService,
+  updateArticleInputSchema,
+  updateOrganizationInputSchema,
+  updatePublicationInputSchema,
+  upsertOrganizationMemberInputSchema,
+  upsertPublicationMemberInputSchema
+} from "@fedistack/publishing";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 
@@ -22,9 +36,16 @@ const magicLinkVerifyBodySchema = z.object({
   token: rawTokenInputSchema
 });
 
+const articleStatusQuerySchema = z.enum([
+  "draft",
+  "published",
+  "unpublished"
+]);
+
 export interface ApiAppDependencies {
   authService: AuthService;
   rateLimiter: SlidingWindowRateLimiter;
+  publishingService?: PublishingService;
   cookieName?: string;
   cookieDomain?: string;
   cookieSecure?: boolean;
@@ -74,6 +95,18 @@ export function createApiApp(deps: ApiAppDependencies): Hono {
       );
     }
 
+    if (err instanceof PublishingError) {
+      return c.json(
+        {
+          error: {
+            code: err.code,
+            message: err.message
+          }
+        },
+        err.statusCode
+      );
+    }
+
     logger.error("api.unhandled_error", {
       message: err instanceof Error ? err.message : "Unknown error",
       path: c.req.path
@@ -89,6 +122,63 @@ export function createApiApp(deps: ApiAppDependencies): Hono {
       500
     );
   });
+
+  async function authenticateRequest(
+    c: Context,
+    requireCsrf: boolean
+  ): Promise<ValidatedSessionContext> {
+    const cookies = parseCookieHeader(c.req.header("cookie"));
+    const rawSessionToken = cookies[cookieName];
+    const sessionCtx = await deps.authService.validateSession(rawSessionToken);
+    if (requireCsrf) {
+      deps.authService.verifyCsrfToken(
+        sessionCtx.session,
+        c.req.header("x-csrf-token")
+      );
+    }
+    return sessionCtx;
+  }
+
+  async function tryResolveViewerUserId(
+    c: Context
+  ): Promise<string | undefined> {
+    const cookies = parseCookieHeader(c.req.header("cookie"));
+    const rawSessionToken = cookies[cookieName];
+    if (!rawSessionToken || rawSessionToken.trim().length < 20) {
+      return undefined;
+    }
+    try {
+      const sessionCtx = await deps.authService.validateSession(rawSessionToken);
+      return sessionCtx.user.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function parseValidatedJson<T>(
+    c: Context,
+    schema: z.ZodType<T>
+  ): Promise<T> {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      throw new PublishingError(
+        "VALIDATION_ERROR",
+        "Request body must be valid JSON.",
+        400
+      );
+    }
+    const parsed = schema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new PublishingError(
+        "VALIDATION_ERROR",
+        parsed.error.issues[0]?.message ?? "Invalid request payload.",
+        400
+      );
+    }
+    return parsed.data;
+  }
 
   app.get("/api/v1/health", (c) => {
     return c.json({
@@ -305,6 +395,302 @@ export function createApiApp(deps: ApiAppDependencies): Hono {
 
     return c.json({ ok: true });
   });
+
+  if (deps.publishingService) {
+    const publishing = deps.publishingService;
+
+    app.get("/api/v1/organizations", async (c) => {
+      const sessionCtx = await authenticateRequest(c, false);
+      const organizations = await publishing.listUserOrganizations(
+        sessionCtx.user
+      );
+      return c.json({ organizations });
+    });
+
+    app.post("/api/v1/organizations", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(c, createOrganizationInputSchema);
+      const organization = await publishing.createOrganization(
+        sessionCtx.user,
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ organization }, 201);
+    });
+
+    app.get("/api/v1/organizations/:organizationId", async (c) => {
+      const sessionCtx = await authenticateRequest(c, false);
+      const detail = await publishing.getOrganizationForActor(
+        sessionCtx.user,
+        c.req.param("organizationId")
+      );
+      return c.json(detail);
+    });
+
+    app.patch("/api/v1/organizations/:organizationId", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(c, updateOrganizationInputSchema);
+      const organization = await publishing.updateOrganization(
+        sessionCtx.user,
+        c.req.param("organizationId"),
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ organization });
+    });
+
+    app.post("/api/v1/organizations/:organizationId/members", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(
+        c,
+        upsertOrganizationMemberInputSchema
+      );
+      const member = await publishing.upsertOrganizationMember(
+        sessionCtx.user,
+        c.req.param("organizationId"),
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ member });
+    });
+
+    app.delete(
+      "/api/v1/organizations/:organizationId/members/:userId",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        await publishing.removeOrganizationMember(
+          sessionCtx.user,
+          c.req.param("organizationId"),
+          c.req.param("userId"),
+          ipAddress
+        );
+        return c.json({ ok: true });
+      }
+    );
+
+    app.get("/api/v1/publications", async (c) => {
+      const sessionCtx = await authenticateRequest(c, false);
+      const organizationId = c.req.query("organizationId") || undefined;
+      const publications = await publishing.listUserPublications(
+        sessionCtx.user,
+        organizationId
+      );
+      return c.json({ publications });
+    });
+
+    app.post("/api/v1/publications", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(c, createPublicationInputSchema);
+      const publication = await publishing.createPublication(sessionCtx.user, {
+        ...body,
+        ipAddress
+      });
+      return c.json({ publication }, 201);
+    });
+
+    app.get("/api/v1/publications/:publicationId", async (c) => {
+      const sessionCtx = await authenticateRequest(c, false);
+      const detail = await publishing.getPublicationForActor(
+        sessionCtx.user,
+        c.req.param("publicationId")
+      );
+      return c.json(detail);
+    });
+
+    app.patch("/api/v1/publications/:publicationId", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(c, updatePublicationInputSchema);
+      const publication = await publishing.updatePublication(
+        sessionCtx.user,
+        c.req.param("publicationId"),
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ publication });
+    });
+
+    app.post("/api/v1/publications/:publicationId/members", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(
+        c,
+        upsertPublicationMemberInputSchema
+      );
+      const member = await publishing.upsertPublicationMember(
+        sessionCtx.user,
+        c.req.param("publicationId"),
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ member });
+    });
+
+    app.delete(
+      "/api/v1/publications/:publicationId/members/:userId",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        await publishing.removePublicationMember(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("userId"),
+          ipAddress
+        );
+        return c.json({ ok: true });
+      }
+    );
+
+    app.get("/api/v1/publications/:publicationId/articles", async (c) => {
+      const sessionCtx = await authenticateRequest(c, false);
+      const rawStatus = c.req.query("status");
+      let status: ArticleStatus | undefined;
+      if (rawStatus !== undefined && rawStatus !== "") {
+        const parsedStatus = articleStatusQuerySchema.safeParse(rawStatus);
+        if (!parsedStatus.success) {
+          throw new PublishingError(
+            "VALIDATION_ERROR",
+            "Invalid status filter.",
+            400
+          );
+        }
+        status = parsedStatus.data;
+      }
+      const articles = await publishing.listEditorialArticles(
+        sessionCtx.user,
+        c.req.param("publicationId"),
+        status ? { status } : undefined
+      );
+      return c.json({ articles });
+    });
+
+    app.post("/api/v1/publications/:publicationId/articles", async (c) => {
+      const ipAddress = getClientIp(c.req.raw.headers);
+      const sessionCtx = await authenticateRequest(c, true);
+      const body = await parseValidatedJson(c, createArticleInputSchema);
+      const article = await publishing.createArticle(
+        sessionCtx.user,
+        c.req.param("publicationId"),
+        {
+          ...body,
+          ipAddress
+        }
+      );
+      return c.json({ article }, 201);
+    });
+
+    app.get(
+      "/api/v1/publications/:publicationId/articles/:articleId",
+      async (c) => {
+        const sessionCtx = await authenticateRequest(c, false);
+        const article = await publishing.getEditorialArticle(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("articleId")
+        );
+        return c.json({ article });
+      }
+    );
+
+    app.patch(
+      "/api/v1/publications/:publicationId/articles/:articleId",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        const body = await parseValidatedJson(c, updateArticleInputSchema);
+        const article = await publishing.updateArticle(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("articleId"),
+          {
+            ...body,
+            ipAddress
+          }
+        );
+        return c.json({ article });
+      }
+    );
+
+    app.post(
+      "/api/v1/publications/:publicationId/articles/:articleId/publish",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        const article = await publishing.publishArticle(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("articleId"),
+          ipAddress
+        );
+        return c.json({ article });
+      }
+    );
+
+    app.post(
+      "/api/v1/publications/:publicationId/articles/:articleId/unpublish",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        const article = await publishing.unpublishArticle(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("articleId"),
+          ipAddress
+        );
+        return c.json({ article });
+      }
+    );
+
+    app.delete(
+      "/api/v1/publications/:publicationId/articles/:articleId",
+      async (c) => {
+        const ipAddress = getClientIp(c.req.raw.headers);
+        const sessionCtx = await authenticateRequest(c, true);
+        await publishing.deleteArticle(
+          sessionCtx.user,
+          c.req.param("publicationId"),
+          c.req.param("articleId"),
+          ipAddress
+        );
+        return c.json({ ok: true });
+      }
+    );
+
+    app.get("/api/v1/public/publications/:publicationSlug", async (c) => {
+      const detail = await publishing.getPublicPublicationBySlug(
+        c.req.param("publicationSlug")
+      );
+      return c.json(detail);
+    });
+
+    app.get(
+      "/api/v1/public/publications/:publicationSlug/articles/:articleSlug",
+      async (c) => {
+        const viewerUserId = await tryResolveViewerUserId(c);
+        const detail = await publishing.getPublicArticleBySlug(
+          c.req.param("publicationSlug"),
+          c.req.param("articleSlug"),
+          viewerUserId
+        );
+        return c.json(detail);
+      }
+    );
+  }
 
   return app;
 }
